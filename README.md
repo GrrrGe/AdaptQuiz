@@ -56,9 +56,11 @@ npm run build
 2. Pick formats: Multiple Choice, True/False, Short Answer. At least one.
 3. Notes split into ~500 token chunks, embedded, stored in Chroma.
 4. Concepts extracted and stored in SQLite.
-5. Quiz serves one question at a time. Each question uses top-k chunks as context.
-6. Scores update per-concept mastery: `0.6 * old + 0.4 * latest`. Streak resets below 0.8.
-7. Weak concepts get re-taught, then re-quizzed. Loop ends at full mastery.
+5. Learn first: one summary + key points per concept. Skip what you know.
+6. Quiz serves one question at a time. Each question uses top-k chunks as context.
+7. Every answer gets a grounded explanation, not just a score.
+8. Scores update per-concept mastery: `0.6 * old + 0.4 * latest`. Streak resets below 0.8.
+9. Weak concepts get re-taught, then re-quizzed. Loop ends at full mastery.
 
 Type rule (in `scheduler.ts`, not the LLM): low mastery gets True/False and MCQ. High mastery gets Short Answer. Disabled types fall back to the next enabled one.
 
@@ -70,6 +72,9 @@ Mastered means score >= 0.85 and streak >= 3.
 - `POST /api/start-session` (`{title?, text?, useDemo?, enabledFormats[]}`)
 - `POST /api/next-question` (`{sessionId}`)
 - `POST /api/submit-answer` (`{pendingId, userAnswer}`)
+- `POST /api/study-guide` (`{sessionId}`)
+- `POST /api/skip-concept` (`{conceptId}`)
+- `POST /api/skip-question` (`{pendingId}`)
 - `POST /api/reteach` (`{sessionId, conceptId}`)
 - `GET /api/dashboard?sessionId=`
 
@@ -81,3 +86,4 @@ Answer keys stay server side in `pending_questions`. Clients see stems only.
 - `concepts(id, session_id, name, source_excerpt, mastery_score, attempts, correct_streak, last_seen)`
 - `attempts(id, concept_id, question, question_type, user_answer, score, created_at)`
 - `pending_questions(id, session_id, concept_id, payload, created_at)`
+- `concept_guides(concept_id, summary, key_points)`
