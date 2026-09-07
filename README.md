@@ -14,7 +14,7 @@ npm run db:init
 npm run dev
 ```
 
-Open http://localhost:3000. Or click Try demo notes. No upload needed.
+Open the URL it prints. Click Try demo notes. No upload needed.
 
 ## Provider
 
@@ -33,11 +33,8 @@ Set `LLM_PROVIDER=ollama` in `.env`.
 ## Chroma
 
 ```bash
-pip install chromadb
-chroma run --path ./chroma-data
+uvx --from chromadb chroma run --path ./chroma-data
 ```
-
-One collection per session. `CHROMA_URL=http://localhost:8000` in `.env`.
 
 ## Checks
 

@@ -31,9 +31,11 @@ export async function POST(req: NextRequest) {
   }
   const parsed = StartSessionSchema.safeParse(body);
   if (!parsed.success) {
-    return fail(400, `Pick at least one question format. (${parsed.error.issues[0]?.message})`);
+    const issue = parsed.error.issues[0];
+    return fail(400, `Bad request: ${issue?.path.join(".") || "body"} ${issue?.message || "invalid"}.`);
   }
   const { title, text, useDemo, enabledFormats } = parsed.data;
+  if (!useDemo && !text) return fail(400, "Upload notes first.");
 
   const source = useDemo ? loadDemoNotes() : (text ?? "");
   const norm = normalizeUploadText(source);

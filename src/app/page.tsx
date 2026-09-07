@@ -11,7 +11,7 @@ import {
   type ReteachRes,
   type DashboardRes,
 } from "@/lib/client";
-import { QuestionCard, Feedback, Btn, GhostBtn } from "@/components/quiz";
+import { QuestionCard, Feedback, Btn, GhostBtn, CARD } from "@/components/quiz";
 import { Dashboard } from "@/components/dashboard";
 
 type Phase =
@@ -110,9 +110,6 @@ export default function Home() {
     if (!res) return;
     setFeedback(res);
     setPhase("feedback");
-    if (res.done) {
-      // still show feedback first; "See results" leads to dashboard
-    }
   }
 
   async function showReteach() {
@@ -134,34 +131,35 @@ export default function Home() {
     setFormats((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]));
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl font-bold">AdaptQuiz</h1>
-        <p className="text-sm text-zinc-400">
-          Upload notes. Quiz to mastery.
+    <div className="space-y-5">
+      <header className="text-center">
+        <p className="text-xs font-semibold uppercase tracking-widest text-[#2C80FF]">
+          Adaptive study
         </p>
+        <h1 className="mt-1 text-4xl font-bold text-[#3D5A80]">AdaptQuiz</h1>
+        <p className="mt-1 text-sm text-[#64748B]">Upload notes. Quiz to mastery.</p>
       </header>
 
       {error && (
-        <div className="rounded-lg border border-red-900 bg-red-950 p-3 text-sm text-red-200">
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
           {error}
         </div>
       )}
 
       {phase === "upload" && (
-        <div className="space-y-4">
+        <div className={`${CARD} space-y-4 p-5`}>
           <textarea
             value={paste}
             onChange={(e) => setPaste(e.target.value)}
-            rows={8}
+            rows={7}
             placeholder="Paste notes…"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 p-3"
+            className="w-full rounded-xl border border-slate-200 bg-white p-3 text-[#3D5A80] placeholder:text-[#94A3B8]"
           />
           <div className="flex flex-wrap items-center gap-2">
             <Btn disabled={busy || !paste.trim()} onClick={() => continueFromUpload("paste")}>
               {busy ? "Uploading…" : "Use text"}
             </Btn>
-            <label className="cursor-pointer rounded-lg border border-zinc-700 px-4 py-2 hover:bg-zinc-800">
+            <label className="cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-2 font-medium text-[#3D5A80] hover:bg-slate-50">
               {file ? file.name : "Choose PDF / .txt"}
               <input
                 type="file"
@@ -183,29 +181,37 @@ export default function Home() {
       )}
 
       {phase === "formats" && (
-        <div className="space-y-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <h2 className="text-lg font-semibold">Formats</h2>
+        <div className={`${CARD} space-y-4 p-5`}>
+          <h2 className="text-lg font-semibold text-[#3D5A80]">Formats</h2>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Title (optional)"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-950 p-2"
+            className="w-full rounded-xl border border-slate-200 bg-white p-2 text-[#3D5A80] placeholder:text-[#94A3B8]"
           />
-          <div className="space-y-2">
-            {ALL_FORMATS.map((f) => (
-              <label key={f.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-800 p-3 hover:bg-zinc-950">
-                <input
-                  type="checkbox"
-                  checked={formats.includes(f.id)}
-                  onChange={() => toggle(f.id)}
-                  className="mt-1"
-                />
-                <span>
-                  <span className="font-medium">{f.label}</span>
-                  <span className="block text-sm text-zinc-400">{f.hint}</span>
-                </span>
-              </label>
-            ))}
+          <div className="grid gap-2 sm:grid-cols-3">
+            {ALL_FORMATS.map((f) => {
+              const on = formats.includes(f.id);
+              return (
+                <button
+                  key={f.id}
+                  onClick={() => toggle(f.id)}
+                  className={`rounded-xl border p-3 text-left ${
+                    on ? "border-[#2C80FF] bg-[#EAF2FF]" : "border-slate-200 bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 font-semibold text-[#3D5A80]">
+                    <span
+                      className={`flex h-5 w-5 items-center justify-center rounded-md text-xs text-white ${on ? "bg-[#2C80FF]" : "bg-slate-200"}`}
+                    >
+                      {on ? "✓" : ""}
+                    </span>
+                    {f.label}
+                  </span>
+                  <span className="mt-1 block text-xs text-[#94A3B8]">{f.hint}</span>
+                </button>
+              );
+            })}
           </div>
           <div className="flex gap-2">
             <Btn disabled={busy || formats.length === 0} onClick={startSession}>
@@ -213,31 +219,34 @@ export default function Home() {
             </Btn>
             <GhostBtn onClick={() => setPhase("upload")}>Back</GhostBtn>
           </div>
-          <p className="text-xs text-zinc-500">
-            Easy first. Harder as you improve.
-          </p>
+          <p className="text-xs text-[#94A3B8]">Easy first. Harder as you improve.</p>
         </div>
       )}
 
-      {phase === "starting" && <p className="text-zinc-400">Reading notes…</p>}
+      {phase === "starting" && (
+        <div className={`${CARD} p-5 text-center text-[#64748B]`}>
+          <p className="text-2xl font-bold text-[#2C80FF]">Reading notes…</p>
+          <p className="mt-1 text-sm">Extracting concepts. This takes a minute.</p>
+        </div>
+      )}
 
       {(phase === "quiz" || phase === "feedback" || phase === "reteach") &&
         question?.progress && (
-          <div className="flex items-center gap-3 text-sm text-zinc-400">
-            <div className="h-2 flex-1 overflow-hidden rounded bg-zinc-800">
+          <div className={`${CARD} flex items-center gap-3 p-4`}>
+            <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
               <div
-                className="h-full bg-emerald-500 transition-all"
+                className="h-full rounded-full bg-[#2C80FF] transition-all"
                 style={{ width: `${question.progress.percent}%` }}
               />
             </div>
-            <span>
-              {question.progress.mastered}/{question.progress.total} mastered
+            <span className="text-sm font-semibold text-[#2C80FF]">
+              {question.progress.mastered}/{question.progress.total}
             </span>
           </div>
         )}
 
       {phase === "quiz" && !question && busy && (
-        <p className="text-zinc-400">Writing question…</p>
+        <div className={`${CARD} p-5 text-center text-[#64748B]`}>Writing question…</div>
       )}
       {phase === "quiz" && question?.questionType && (
         <QuestionCard
@@ -258,11 +267,14 @@ export default function Home() {
       )}
 
       {phase === "reteach" && lesson && (
-        <div className="space-y-4 rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-          <h2 className="text-lg font-semibold">Re-teach: {lesson.conceptName}</h2>
-          <p className="whitespace-pre-wrap text-zinc-200">{lesson.explanation}</p>
+        <div className={`${CARD} space-y-4 p-5`}>
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#2C80FF]">
+            Re-teach
+          </p>
+          <h2 className="text-lg font-semibold text-[#3D5A80]">{lesson.conceptName}</h2>
+          <p className="whitespace-pre-wrap text-[#3D5A80]">{lesson.explanation}</p>
           {lesson.sourceExcerpt && (
-            <p className="text-xs text-zinc-500">From your notes: “{lesson.sourceExcerpt}”</p>
+            <p className="text-xs text-[#94A3B8]">From your notes: “{lesson.sourceExcerpt}”</p>
           )}
           <div className="flex gap-2">
             <Btn disabled={busy} onClick={() => loadNext()}>
@@ -276,9 +288,10 @@ export default function Home() {
       {(phase === "dashboard" || phase === "complete") && dash && (
         <div className="space-y-4">
           {phase === "complete" && (
-            <p className="rounded-lg border border-emerald-900 bg-emerald-950 p-3 text-emerald-200">
-              Full mastery reached.
-            </p>
+            <div className="rounded-2xl bg-[#2C80FF] p-5 text-center text-white shadow-[0_2px_20px_-4px_rgba(44,128,255,0.5)]">
+              <p className="text-2xl font-bold">Full mastery reached.</p>
+              <p className="mt-1 text-sm text-white/70">Every concept learned.</p>
+            </div>
           )}
           <Dashboard data={dash} />
           <div className="flex gap-2">

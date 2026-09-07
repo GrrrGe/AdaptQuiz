@@ -3,14 +3,19 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "AdaptQuiz",
-  description: "Adaptive quizzer grounded in your lecture notes (RAG).",
+  description: "Upload notes. Quiz to mastery.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-zinc-950 text-zinc-100 antialiased">
-        <main className="mx-auto max-w-3xl px-4 py-10">{children}</main>
+      <body className="min-h-screen font-sans text-[#3D5A80] antialiased">
+        <div
+          className="min-h-screen"
+          style={{ background: "linear-gradient(180deg, #4D95FF 0%, #d4e6ff 30%, #FFFFFF 55%)" }}
+        >
+          <main className="mx-auto max-w-3xl px-4 py-10">{children}</main>
+        </div>
       </body>
     </html>
   );

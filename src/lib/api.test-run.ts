@@ -89,8 +89,8 @@ async function main(): Promise<void> {
     "unknown format rejected",
   );
   assert(
-    StartSessionSchema.safeParse({ useDemo: true, enabledFormats: ["true_false"] }).success,
-    "demo + single format accepted",
+    StartSessionSchema.safeParse({ useDemo: true, text: null, enabledFormats: ["true_false"] }).success,
+    "demo session with text:null accepted (regression)",
   );
   assert(
     !SubmitAnswerSchema.safeParse({ pendingId: "q_1" }).success,

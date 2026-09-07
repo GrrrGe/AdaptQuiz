@@ -201,8 +201,8 @@ export function loadDemoNotes(): string {
 // ------------------------------------------------------------ request schemas
 
 export const StartSessionSchema = z.object({
-  title: z.string().max(120).optional(),
-  text: z.string().optional(),
+  title: z.string().max(120).nullish(),
+  text: z.string().nullish(),
   useDemo: z.boolean().optional(),
   enabledFormats: z.array(z.enum(["mcq", "true_false", "short_answer"])).min(1),
 });
