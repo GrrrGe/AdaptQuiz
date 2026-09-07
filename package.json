@@ -1,0 +1,38 @@
+{
+  "name": "adaptquiz",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:init": "tsx src/lib/init-db.ts",
+    "keys:check": "tsx src/lib/keys-check.ts",
+    "rag:test": "tsx src/lib/rag.test-run.ts",
+    "llm:test": "tsx src/lib/llm.test-run.ts",
+    "scheduler:test": "tsx src/lib/scheduler.test-run.ts",
+    "api:test": "tsx src/lib/api.test-run.ts"
+  },
+  "dependencies": {
+    "chromadb": "^1.10.0",
+    "@langchain/openai": "^0.4.4",
+    "@langchain/community": "^0.3.30",
+    "@langchain/textsplitters": "^0.1.0",
+    "@langchain/core": "^0.3.40",
+    "next": "^14.2.0",
+    "openai": "^4.77.0",
+    "pdf-parse": "^1.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

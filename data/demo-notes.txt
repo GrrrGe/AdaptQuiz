@@ -1,0 +1,47 @@
+# Photosynthesis & Cellular Respiration — Demo Notes for AdaptQuiz
+
+## Photosynthesis (overview)
+Photosynthesis converts light energy into chemical energy stored as glucose.
+It occurs in the chloroplasts of plant cells, specifically in the thylakoid
+membranes (light-dependent reactions) and the stroma (Calvin cycle).
+Overall equation: 6CO2 + 6H2O + light energy -> C6H12O6 + 6O2.
+
+## Light-dependent reactions
+Light-dependent reactions take place in the thylakoid membranes. Chlorophyll
+absorbs photons, splitting water (photolysis) to release oxygen, protons, and
+electrons. The electron transport chain pumps protons into the thylakoid lumen,
+creating a gradient that ATP synthase uses to make ATP. NADP+ is reduced to
+NADPH. These reactions require light and produce ATP, NADPH, and O2.
+
+## Calvin cycle (light-independent reactions)
+The Calvin cycle runs in the stroma and does not directly require light, but it
+depends on ATP and NADPH from the light reactions. Carbon fixation: the enzyme
+RuBisCO attaches CO2 to ribulose-1,5-bisphosphate (RuBP). Reduction: ATP and
+NADPH convert 3-PGA into G3P. Regeneration: some G3P rebuilds RuBP at the cost
+of more ATP. Two G3P molecules combine to form one glucose.
+
+## Cellular respiration (overview)
+Cellular respiration breaks down glucose to release ATP. Overall equation:
+C6H12O6 + 6O2 -> 6CO2 + 6H2O + ATP (about 30-32 ATP per glucose in eukaryotes).
+It occurs in three stages: glycolysis (cytoplasm), the Krebs cycle (mitochondrial
+matrix), and oxidative phosphorylation (inner mitochondrial membrane).
+
+## Glycolysis
+Glycolysis splits one glucose (6 carbons) into two pyruvate (3 carbons each) in
+the cytoplasm. It nets 2 ATP and 2 NADH, and requires no oxygen, so it also runs
+during anaerobic conditions. When oxygen is absent, pyruvate is fermented into
+lactate (animals) or ethanol + CO2 (yeast).
+
+## Krebs cycle (citric acid cycle)
+Pyruvate is first oxidised to acetyl-CoA, which enters the Krebs cycle in the
+mitochondrial matrix. Each turn releases 2 CO2, and produces 3 NADH, 1 FADH2,
+and 1 GTP (≈ATP). The NADH and FADH2 carry electrons to the electron transport
+chain. Oxygen is NOT directly consumed here — it acts as the final electron
+acceptor later in oxidative phosphorylation.
+
+## Oxidative phosphorylation
+On the inner mitochondrial membrane, the electron transport chain passes
+electrons from NADH/FADH2 to oxygen, pumping protons into the intermembrane
+space. ATP synthase lets protons flow back, making ~26-28 ATP (chemiosmosis).
+Cyanide and carbon monoxide are poisons because they block the chain; without
+oxygen as the final acceptor, the chain backs up and ATP production collapses.

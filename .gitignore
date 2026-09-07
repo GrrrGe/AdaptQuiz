@@ -1,0 +1,16 @@
+# --->8 ---- AdaptQuiz ignores (Step 1 scaffold) ---- 8<---
+node_modules/
+.next/
+*.tsbuildinfo
+out/
+dist/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+chroma-data/
+chroma-data-test/
+.env
+.env.local
+.DS_Store
