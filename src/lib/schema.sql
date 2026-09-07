@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   title TEXT NOT NULL,
   -- JSON array of enabled formats, subset of ["mcq","true_false","short_answer"], min length 1.
   enabled_formats TEXT NOT NULL,
+  -- Full notes text (powers the one-shot study guide; added by migration on old DBs).
+  source_text TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
@@ -47,4 +49,12 @@ CREATE TABLE IF NOT EXISTS pending_questions (
   -- JSON PendingPayload (full question incl. answer key + grading context).
   payload TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+-- Teach-first study guide: one cached summary + key points per concept,
+-- generated once per session so the guide screen is instant on revisit.
+CREATE TABLE IF NOT EXISTS concept_guides (
+  concept_id TEXT PRIMARY KEY REFERENCES concepts(id) ON DELETE CASCADE,
+  summary TEXT NOT NULL,
+  key_points TEXT NOT NULL
 );

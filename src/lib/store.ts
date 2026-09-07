@@ -77,6 +77,17 @@ export function getSession(db: Db, id: string): Session | null {
   return row ? toSession(row) : null;
 }
 
+export function setSessionText(db: Db, id: string, text: string): void {
+  db.prepare("UPDATE sessions SET source_text = ? WHERE id = ?").run(text, id);
+}
+
+export function getSessionText(db: Db, id: string): string {
+  const row = db
+    .prepare("SELECT source_text FROM sessions WHERE id = ?")
+    .get(id) as unknown as { source_text?: string } | undefined;
+  return row?.source_text ?? "";
+}
+
 export function insertConcepts(
   db: Db,
   sessionId: string,
@@ -172,6 +183,51 @@ export function getPending(db: Db, id: string): (PendingPayload & { id: string }
 
 export function deletePending(db: Db, id: string): void {
   db.prepare("DELETE FROM pending_questions WHERE id = ?").run(id);
+}
+
+// ------------------------------------------------------------ study guide
+
+export interface GuideView {
+  concept_id: string;
+  concept_name: string;
+  summary: string;
+  keyPoints: string[];
+  sourceExcerpt: string;
+}
+
+export function saveGuide(
+  db: Db,
+  conceptId: string,
+  summary: string,
+  keyPoints: string[],
+): void {
+  db.prepare(
+    "INSERT INTO concept_guides(concept_id, summary, key_points) VALUES(?, ?, ?) ON CONFLICT(concept_id) DO UPDATE SET summary=excluded.summary, key_points=excluded.key_points",
+  ).run(conceptId, summary, JSON.stringify(keyPoints));
+}
+
+export function getGuides(db: Db, sessionId: string): GuideView[] {
+  const rows = db
+    .prepare(
+      `SELECT c.id AS concept_id, c.name AS concept_name, c.source_excerpt AS sourceExcerpt,
+              g.summary AS summary, g.key_points AS key_points
+         FROM concepts c LEFT JOIN concept_guides g ON g.concept_id = c.id
+        WHERE c.session_id = ? ORDER BY c.rowid`,
+    )
+    .all(sessionId) as unknown as {
+    concept_id: string;
+    concept_name: string;
+    sourceExcerpt: string;
+    summary: string | null;
+    key_points: string | null;
+  }[];
+  return rows.map((r) => ({
+    concept_id: r.concept_id,
+    concept_name: r.concept_name,
+    sourceExcerpt: r.sourceExcerpt,
+    summary: r.summary ?? "",
+    keyPoints: r.key_points ? (JSON.parse(r.key_points) as string[]) : [],
+  }));
 }
 
 // ------------------------------------------------------------ upload/text guards

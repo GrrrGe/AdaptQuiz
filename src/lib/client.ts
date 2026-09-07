@@ -66,6 +66,14 @@ export interface ReteachRes {
   sourceExcerpt: string;
 }
 
+export interface GuideItemView {
+  concept_id: string;
+  concept_name: string;
+  summary: string;
+  keyPoints: string[];
+  sourceExcerpt: string;
+}
+
 export interface DashboardRes {
   session: { id: string; title: string; enabledFormats: Format[]; createdAt: string };
   concepts: {
@@ -113,6 +121,12 @@ export const api = {
     req<SubmitRes>("/api/submit-answer", json({ pendingId, userAnswer })),
   reteach: (sessionId: string, conceptId: string) =>
     req<ReteachRes>("/api/reteach", json({ sessionId, conceptId })),
+  studyGuide: (sessionId: string) =>
+    req<{ guides: GuideItemView[] }>("/api/study-guide", json({ sessionId })),
+  skipConcept: (conceptId: string) =>
+    req<{ skipped: boolean }>("/api/skip-concept", json({ conceptId })),
+  skipQuestion: (pendingId: string) =>
+    req<{ skipped: boolean }>("/api/skip-question", json({ pendingId })),
   dashboard: (sessionId: string) =>
     req<DashboardRes>(`/api/dashboard?sessionId=${encodeURIComponent(sessionId)}`),
 };

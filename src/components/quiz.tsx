@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { NextQuestionRes, SubmitRes } from "@/lib/client";
 
 const CARD = "rounded-2xl border border-zinc-800 bg-zinc-900";
@@ -46,14 +46,54 @@ function ArrowBtn(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
 export function QuestionCard({
   q,
   onSubmit,
+  onSkip,
   busy,
 }: {
   q: NextQuestionRes & { questionType: NonNullable<NextQuestionRes["questionType"]> };
   onSubmit: (answer: string | number | boolean) => void;
+  onSkip: () => void;
   busy: boolean;
 }) {
   const [mcq, setMcq] = useState<number | null>(null);
   const [text, setText] = useState("");
+
+  // Keys: 1-4/A-D pick MCQ, Enter submits, T/F answers true/false,
+  // Cmd/Ctrl+Enter submits short answer.
+  useEffect(() => {
+    setMcq(null);
+    setText("");
+  }, [q.pendingId]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (busy) return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (q.questionType === "short_answer") {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && text.trim()) onSubmit(text.trim());
+        return;
+      }
+      if (tag === "TEXTAREA" || tag === "INPUT") return;
+      if (q.questionType === "mcq" && "options" in q.question!) {
+        const n = (q.question as { options: string[] }).options.length;
+        const idx =
+          /^[1-9]$/.test(e.key) ? parseInt(e.key, 10) - 1
+          : /^[a-dA-D]$/.test(e.key) ? e.key.toLowerCase().charCodeAt(0) - 97
+          : -1;
+        if (idx >= 0 && idx < n) {
+          setMcq(idx);
+          return;
+        }
+        if (e.key === "Enter" && mcq !== null) onSubmit(mcq);
+        return;
+      }
+      if (q.questionType === "true_false") {
+        if (e.key === "t" || e.key === "T") onSubmit(true);
+        if (e.key === "f" || e.key === "F") onSubmit(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [q, mcq, text, busy, onSubmit]);
 
   return (
     <div className={`${CARD} space-y-4 p-5`}>
@@ -81,9 +121,15 @@ export function QuestionCard({
               {opt}
             </button>
           ))}
-          <Btn disabled={mcq === null || busy} onClick={() => mcq !== null && onSubmit(mcq)}>
-            {busy ? "Grading…" : "Submit"}
-          </Btn>
+          <div className="flex gap-2">
+            <Btn disabled={mcq === null || busy} onClick={() => mcq !== null && onSubmit(mcq)}>
+              {busy ? "Grading…" : "Submit"}
+            </Btn>
+            <GhostBtn disabled={busy} onClick={onSkip}>
+              Skip
+            </GhostBtn>
+          </div>
+          <p className="text-xs text-zinc-600">Keys 1-4 or A-D pick. Enter submits.</p>
         </div>
       )}
 
@@ -97,7 +143,11 @@ export function QuestionCard({
             <GhostBtn disabled={busy} onClick={() => onSubmit(false)} className="flex-1">
               False
             </GhostBtn>
+            <GhostBtn disabled={busy} onClick={onSkip}>
+              Skip
+            </GhostBtn>
           </div>
+          <p className="text-xs text-zinc-600">Keys T or F answer.</p>
         </div>
       )}
 
@@ -111,9 +161,15 @@ export function QuestionCard({
             placeholder="1-3 sentences…"
             className="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-2 placeholder:text-zinc-600"
           />
-          <Btn disabled={!text.trim() || busy} onClick={() => onSubmit(text.trim())}>
-            {busy ? "Grading…" : "Submit"}
-          </Btn>
+          <div className="flex gap-2">
+            <Btn disabled={!text.trim() || busy} onClick={() => onSubmit(text.trim())}>
+              {busy ? "Grading…" : "Submit"}
+            </Btn>
+            <GhostBtn disabled={busy} onClick={onSkip}>
+              Skip
+            </GhostBtn>
+          </div>
+          <p className="text-xs text-zinc-600">Cmd+Enter submits.</p>
         </div>
       )}
     </div>

@@ -7,6 +7,7 @@ import {
   insertConcepts,
   normalizeUploadText,
   loadDemoNotes,
+  setSessionText,
 } from "@/lib/store";
 import { ingestNotes } from "@/lib/rag";
 import { extractConcepts } from "@/lib/llm";
@@ -45,6 +46,7 @@ export async function POST(req: NextRequest) {
 
   const db = getDb();
   const session = createSession(db, title?.trim() || "Untitled session", enabledFormats);
+  setSessionText(db, session.id, norm.text);
 
   try {
     const ing = await ingestNotes(norm.text, session.id);

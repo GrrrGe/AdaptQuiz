@@ -178,11 +178,15 @@ const McqSchema = z.object({
   stem: z.string().min(1),
   options: z.array(z.string().min(1)).length(4),
   correctIndex: z.number().int().min(0).max(3),
+  // 1-2 sentences teaching WHY the answer is right, grounded in context.
+  explanation: z.string().min(1).max(400),
 });
 const TrueFalseSchema = z.object({
   type: z.literal("true_false"),
   statement: z.string().min(1),
   answer: z.boolean(),
+  // 1-2 sentences teaching WHY, grounded in context.
+  explanation: z.string().min(1).max(400),
 });
 const ShortAnswerSchema = z.object({
   type: z.literal("short_answer"),
@@ -198,10 +202,12 @@ export const QuestionSchema = z.discriminatedUnion("type", [
 export type Question = z.infer<typeof QuestionSchema>;
 
 const TYPE_INSTRUCTIONS: Record<QuestionType, string> = {
-  mcq: `Write ONE multiple-choice question as JSON {"type":"mcq","stem":...,"options":[exactly 4 strings],"correctIndex":0-3}. Distractors must be plausible and drawn from the context; exactly one option correct.`,
-  true_false: `Write ONE true/false item as JSON {"type":"true_false","statement":...,"answer":true/false}. The statement must be unambiguously true or false given ONLY the context — no tricks requiring outside knowledge.`,
+  mcq: `Write ONE multiple-choice question as JSON {"type":"mcq","stem":...,"options":[exactly 4 strings],"correctIndex":0-3,"explanation":...}. Distractors must be plausible and drawn from the context; exactly one option correct. The explanation teaches WHY the correct option is right in 1-2 sentences, using only the context.`,
+  true_false: `Write ONE true/false item as JSON {"type":"true_false","statement":...,"answer":true/false,"explanation":...}. The statement must be unambiguously true or false given ONLY the context, no tricks requiring outside knowledge. The explanation teaches WHY in 1-2 sentences, using only the context.`,
   short_answer: `Write ONE short-answer question as JSON {"type":"short_answer","stem":...,"rubric":...,"expectedAnswer":...}. The stem needs a 1-3 sentence answer. The rubric lists the 2-4 key points a correct answer must contain. expectedAnswer is a model answer of 1-3 sentences.`,
 };
+
+const STYLE_RULE = `Use plain ASCII text only. No em dashes. No markdown formatting.`;
 
 const DIFFICULTY_HINT: Record<Difficulty, string> = {
   easy: "Test direct recall of one fact stated in the context.",
@@ -216,14 +222,25 @@ export async function generateQuestion(
   difficulty: Difficulty,
   chat: ChatFn = providerChatFn(),
 ): Promise<Question> {
-  const raw = await chat(
-    `You write quiz questions strictly grounded in the provided context. Use ONLY facts entailed by the context; never import outside knowledge. Reply with a single JSON object, no commentary.`,
-    `CONCEPT: ${concept}\nDIFFICULTY: ${difficulty} — ${DIFFICULTY_HINT[difficulty]}\nCONTEXT:\n${context}\n\n${TYPE_INSTRUCTIONS[type]}`,
-    { json: true },
-  );
-  const q = parseJson(raw, QuestionSchema, "question");
-  if (q.type !== type) throw new LlmError(`asked for ${type}, got ${q.type}`);
-  return q;
+  const system = `You write quiz questions strictly grounded in the provided context. Use ONLY facts entailed by the context; never import outside knowledge. ${STYLE_RULE} Reply with a single JSON object, no commentary.`;
+  const user = `CONCEPT: ${concept}\nDIFFICULTY: ${difficulty} - ${DIFFICULTY_HINT[difficulty]}\nCONTEXT:\n${context}\n\n${TYPE_INSTRUCTIONS[type]}`;
+  const raw = await chat(system, user, { json: true });
+  try {
+    const q = parseJson(raw, QuestionSchema, "question");
+    if (q.type !== type) throw new LlmError(`asked for ${type}, got ${q.type}`);
+    return q;
+  } catch (e) {
+    if (!(e instanceof LlmError)) throw e;
+    // Small local models sometimes drop a field. One repair attempt.
+    const retry = await chat(
+      system,
+      `${user}\n\nYour last reply was invalid: ${e.message}. Reply again with the corrected single JSON object containing ALL required fields.`,
+      { json: true },
+    );
+    const q = parseJson(retry, QuestionSchema, "question");
+    if (q.type !== type) throw new LlmError(`asked for ${type}, got ${q.type}`);
+    return q;
+  }
 }
 
 // ----------------------------------------------------------------- grading
@@ -263,7 +280,53 @@ export async function reteach(
   chat: ChatFn = providerChatFn(),
 ): Promise<string> {
   return chat(
-    `You are a tutor re-teaching one concept the student got wrong. Explain clearly in 3-6 sentences using ONLY the context. End with one sentence on the likely misconception to avoid. Plain text, no JSON.`,
+    `You are a tutor re-teaching one concept the student got wrong. Explain clearly in 3-6 sentences using ONLY the context. End with one sentence on the likely misconception to avoid. ${STYLE_RULE} Plain text, no JSON.`,
     `CONCEPT: ${concept}\nCONTEXT:\n${context}`,
   );
+}
+
+// ------------------------------------------------------------------- guide
+
+const GuideItemSchema = z.object({
+  name: z.string().min(1),
+  summary: z.string().min(1).max(1200),
+  keyPoints: z.array(z.string().min(1)).min(2).max(4),
+});
+const GuideSchema = z.object({ items: z.array(GuideItemSchema).min(1) });
+export type GuideItem = z.infer<typeof GuideItemSchema>;
+
+/** Full notes small enough for one guide call (else per-concept fallback). */
+export const GUIDE_SINGLE_BUDGET = 12_000;
+
+/**
+ * Teach-first study guide: one plain-language summary + 2-4 key points per
+ * concept, grounded in the notes. Single call when the text fits, otherwise
+ * one call per concept over retrieved context. Returns items in any order;
+ * callers match by name.
+ */
+export async function buildGuide(
+  fullText: string,
+  conceptNames: string[],
+  contextFor: (name: string) => Promise<string>,
+  chat: ChatFn = providerChatFn(),
+): Promise<GuideItem[]> {
+  const system = `You teach from lecture notes. For EACH concept: a plain-language summary (3-5 sentences, no jargon without explaining it) and 2-4 key points (short phrases). Use ONLY the notes. ${STYLE_RULE} Reply with a single JSON object {"items": [{"name": <exact concept name>, "summary": ..., "keyPoints": [...]}]}, no commentary.`;
+  if (fullText.length > 0 && fullText.length <= GUIDE_SINGLE_BUDGET) {
+    const raw = await chat(
+      system,
+      `CONCEPTS:\n${conceptNames.join("\n")}\n\nNOTES:\n${fullText}`,
+      { json: true },
+    );
+    return parseJson(raw, GuideSchema, "guide").items;
+  }
+  const out: GuideItem[] = [];
+  for (const name of conceptNames) {
+    const raw = await chat(
+      system,
+      `CONCEPTS:\n${name}\n\nNOTES:\n${await contextFor(name)}`,
+      { json: true },
+    );
+    out.push(...parseJson(raw, GuideSchema, "guide").items);
+  }
+  return out;
 }

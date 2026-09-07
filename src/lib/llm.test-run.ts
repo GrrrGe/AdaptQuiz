@@ -5,10 +5,12 @@ import {
   generateQuestion,
   gradeAnswer,
   reteach,
+  buildGuide,
   providerChatFn,
   ollamaChatFn,
   LlmError,
   EXTRACT_SINGLE_BUDGET,
+  GUIDE_SINGLE_BUDGET,
   type ChatFn,
 } from "./llm";
 
@@ -69,6 +71,7 @@ async function main(): Promise<void> {
         stem: "Where does RuBisCO act?",
         options: ["Stroma", "Thylakoid", "Matrix", "Cytoplasm"],
         correctIndex: 0,
+        explanation: "The context places RuBisCO in the stroma.",
       }),
     );
   };
@@ -76,16 +79,25 @@ async function main(): Promise<void> {
   assert(mcq.type === "mcq", "mcq parses with 4 options + index");
   if (mcq.type === "mcq") {
     assert(mcq.options.length === 4 && mcq.correctIndex === 0, "mcq options/index valid");
+    assert(mcq.explanation.includes("stroma"), "mcq carries teaching explanation");
   }
   assert(seen[seen.length - 1].user.includes(ctx), "question prompt carries context");
   assert(seen[seen.length - 1].user.includes("Calvin cycle"), "question prompt names concept");
 
   const tf = await generateQuestion("Calvin cycle", ctx, "true_false", "easy", () =>
     Promise.resolve(
-      JSON.stringify({ type: "true_false", statement: "RuBisCO acts in the stroma.", answer: true }),
+      JSON.stringify({
+        type: "true_false",
+        statement: "RuBisCO acts in the stroma.",
+        answer: true,
+        explanation: "The context states RuBisCO attaches CO2 in the stroma.",
+      }),
     ),
   );
   assert(tf.type === "true_false" && tf.answer === true, "true_false parses");
+  if (tf.type === "true_false") {
+    assert(tf.explanation.length > 0, "true_false carries teaching explanation");
+  }
 
   const sa = await generateQuestion("Calvin cycle", ctx, "short_answer", "hard", () =>
     Promise.resolve(
@@ -106,7 +118,7 @@ async function main(): Promise<void> {
   let threw = false;
   try {
     await generateQuestion("C", ctx, "mcq", "easy", () =>
-      Promise.resolve(JSON.stringify({ type: "true_false", statement: "x", answer: true })),
+      Promise.resolve(JSON.stringify({ type: "true_false", statement: "x", answer: true, explanation: "y" })),
     );
   } catch (e) {
     threw = e instanceof LlmError;
@@ -130,6 +142,28 @@ async function main(): Promise<void> {
     threw = e instanceof LlmError;
   }
   assert(threw, "schema violation (1 option, index 9) throws LlmError");
+
+  // --- generateQuestion: one repair attempt on invalid first reply ---
+  let repairCalls = 0;
+  const repairFake: ChatFn = () => {
+    repairCalls++;
+    if (repairCalls === 1) {
+      return Promise.resolve(JSON.stringify({ type: "mcq", stem: "s", options: ["a", "b", "c", "d"], correctIndex: 0 }));
+    }
+    return Promise.resolve(
+      JSON.stringify({ type: "mcq", stem: "s", options: ["a", "b", "c", "d"], correctIndex: 0, explanation: "e" }),
+    );
+  };
+  const repaired = await generateQuestion("C", ctx, "mcq", "easy", repairFake);
+  assert(repairCalls === 2 && repaired.type === "mcq", "missing field triggers one repair call");
+
+  threw = false;
+  try {
+    await generateQuestion("C", ctx, "mcq", "easy", () => Promise.resolve("never valid"));
+  } catch (e) {
+    threw = e instanceof LlmError;
+  }
+  assert(threw, "two bad replies still throw LlmError");
 
   // --- gradeAnswer ---
   const grade = await gradeAnswer(
@@ -171,6 +205,45 @@ async function main(): Promise<void> {
     threw = e instanceof LlmError;
   }
   assert(threw, "unknown LLM_PROVIDER throws LlmError");
+
+  // --- buildGuide: single call for short notes ---
+  const GUIDE_JSON = JSON.stringify({
+    items: [
+      { name: "Calvin cycle", summary: "Plants fix carbon in the stroma.", keyPoints: ["RuBisCO", "Needs ATP"] },
+    ],
+  });
+  let guideCalls = 0;
+  const guideSingle: ChatFn = (system, user) => {
+    guideCalls++;
+    seen.push({ system, user });
+    assert(user.includes("NOTES:"), "guide prompt carries notes");
+    return Promise.resolve(GUIDE_JSON);
+  };
+  const items = await buildGuide("short notes", ["Calvin cycle"], () => Promise.resolve("ctx"), guideSingle);
+  assert(guideCalls === 1, "short notes use one guide call");
+  assert(items[0].summary.includes("stroma") && items[0].keyPoints.length === 2, "guide item parsed");
+
+  // --- buildGuide: per-concept fallback for long notes ---
+  guideCalls = 0;
+  const seenNames: string[] = [];
+  const guideMulti: ChatFn = (system, user) => {
+    guideCalls++;
+    const m = /CONCEPTS:\n([^\n]+)/.exec(user);
+    seenNames.push(m?.[1] ?? "?");
+    return Promise.resolve(
+      JSON.stringify({ items: [{ name: m?.[1] ?? "?", summary: "s", keyPoints: ["a", "b"] }] }),
+    );
+  };
+  await buildGuide("x".repeat(GUIDE_SINGLE_BUDGET + 10), ["A", "B"], (n) => Promise.resolve(`ctx-${n}`), guideMulti);
+  assert(guideCalls === 2 && seenNames.join(",") === "A,B", "long notes use one call per concept");
+
+  threw = false;
+  try {
+    await buildGuide("notes", ["A"], () => Promise.resolve("c"), () => Promise.resolve("bad json"));
+  } catch (e) {
+    threw = e instanceof LlmError;
+  }
+  assert(threw, "bad guide JSON throws LlmError");
 
   // --- ollama provider (stubbed fetch, no server) ---
   let sentBody = "";
@@ -216,7 +289,7 @@ async function main(): Promise<void> {
 
   // End-to-end through the seam: generateQuestion over the ollama ChatFn.
   const q = await generateQuestion("Calvin cycle", ctx, "true_false", "easy", () =>
-    Promise.resolve(JSON.stringify({ type: "true_false", statement: "s", answer: false })),
+    Promise.resolve(JSON.stringify({ type: "true_false", statement: "s", answer: false, explanation: "e" })),
   );
   assert(q.type === "true_false", "wrappers work unchanged over any ChatFn");
 

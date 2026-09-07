@@ -59,12 +59,12 @@ export async function POST(req: NextRequest) {
     score = gradeMcq(q.correctIndex, userAnswer);
     correctAnswer = q.options[q.correctIndex];
     explanation =
-      score === 1.0 ? "Correct." : `Correct option: "${correctAnswer}".`;
+      score === 1.0 ? `Correct. ${q.explanation}` : q.explanation;
   } else if (q.type === "true_false") {
     if (typeof userAnswer !== "boolean") return fail(400, "True/false answer must be true or false.");
     score = gradeTrueFalse(q.answer, userAnswer);
     correctAnswer = q.answer ? "True" : "False";
-    explanation = score === 1.0 ? "Correct." : `Correct: ${correctAnswer.toLowerCase()}.`;
+    explanation = score === 1.0 ? `Correct. ${q.explanation}` : q.explanation;
   } else {
     const key = requireApiKey();
     if (key) return key;

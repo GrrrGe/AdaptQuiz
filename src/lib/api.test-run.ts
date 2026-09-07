@@ -14,6 +14,10 @@ import {
   savePending,
   getPending,
   deletePending,
+  saveGuide,
+  getGuides,
+  setSessionText,
+  getSessionText,
   loadDemoNotes,
 } from "./store";
 import { updateMastery, pickNextConcept, sessionProgress } from "./scheduler";
@@ -35,6 +39,7 @@ async function main(): Promise<void> {
     }[]
   ).map((t) => t.name);
   assert(tables.includes("pending_questions"), "pending_questions table migrated");
+  assert(tables.includes("concept_guides"), "concept_guides table migrated");
 
   // --- session + concepts round-trip ---
   const s = createSession(db, "Bio 101", ["mcq", "short_answer"]);
@@ -56,6 +61,7 @@ async function main(): Promise<void> {
       stem: "Where?",
       options: ["Stroma", "Thylakoid", "Matrix", "Cristae"],
       correctIndex: 0,
+      explanation: "The stroma is stated in context.",
     },
     context: "RuBisCO fixes CO2 in the stroma.",
     difficulty: "medium",
@@ -102,6 +108,18 @@ async function main(): Promise<void> {
   assert(!normalizeUploadText("x".repeat(200_001)).ok, "oversize notes rejected");
   assert(normalizeUploadText("  valid notes with enough length  ").ok, "valid notes pass");
   assert(loadDemoNotes().includes("RuBisCO"), "demo notes load without upload");
+
+  // --- session text + study guide store ---
+  setSessionText(db, s.id, "full notes here");
+  assert(getSessionText(db, s.id) === "full notes here", "session source text stored");
+  const emptyGuides = getGuides(db, s.id);
+  assert(emptyGuides.length === 2 && emptyGuides[0].summary === "", "guides empty before generation");
+  saveGuide(db, stored[0].id, "Plants fix carbon.", ["RuBisCO", "Stroma"]);
+  const guides = getGuides(db, s.id);
+  assert(guides[0].summary === "Plants fix carbon.", "guide summary cached");
+  assert(guides[0].keyPoints.length === 2, "guide key points cached");
+  assert(guides[0].sourceExcerpt === "RuBisCO fixes CO2.", "guide carries source excerpt");
+  assert(guides[1].summary === "", "ungenerated concept stays empty");
 
   console.log(process.exitCode ? "API TEST: FAILURES" : "API TEST: ALL PASS");
 }

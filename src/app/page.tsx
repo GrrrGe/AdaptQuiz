@@ -10,6 +10,7 @@ import {
   type SubmitRes,
   type ReteachRes,
   type DashboardRes,
+  type GuideItemView,
 } from "@/lib/client";
 import { QuestionCard, Feedback, Btn, GhostBtn, ArrowBtn, CARD } from "@/components/quiz";
 import { Dashboard } from "@/components/dashboard";
@@ -18,6 +19,7 @@ type Phase =
   | "upload"
   | "formats"
   | "starting"
+  | "guide"
   | "quiz"
   | "feedback"
   | "reteach"
@@ -59,6 +61,32 @@ function TextIcon() {
   );
 }
 
+function Steps({ phase }: { phase: Phase }) {
+  const steps = ["Upload", "Learn", "Quiz", "Done"];
+  const active =
+    phase === "upload" ? 0
+    : phase === "formats" || phase === "starting" ? 0
+    : phase === "guide" ? 1
+    : phase === "complete" || phase === "dashboard" ? 3
+    : 2;
+  return (
+    <div className="flex items-center justify-center gap-1 text-xs">
+      {steps.map((s, i) => (
+        <span key={s} className="flex items-center gap-1">
+          <span
+            className={`rounded-full px-2 py-0.5 font-medium ${
+              i <= active ? "bg-white text-zinc-950" : "text-zinc-600"
+            }`}
+          >
+            {s}
+          </span>
+          {i < steps.length - 1 && <span className="text-zinc-700">›</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export default function Home() {
   const [phase, setPhase] = useState<Phase>("upload");
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +106,7 @@ export default function Home() {
   // session
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [spaces, setSpaces] = useState<Space[]>([]);
+  const [guides, setGuides] = useState<GuideItemView[]>([]);
   const [question, setQuestion] = useState<NextQuestionRes | null>(null);
   const [feedback, setFeedback] = useState<SubmitRes | null>(null);
   const [lesson, setLesson] = useState<ReteachRes | null>(null);
@@ -121,6 +150,7 @@ export default function Home() {
     setUseDemo(false);
     setTitle("");
     setSessionId(null);
+    setGuides([]);
     setQuestion(null);
     setFeedback(null);
     setLesson(null);
@@ -144,7 +174,7 @@ export default function Home() {
     setPhase("formats");
   }
 
-  // ---- formats → quiz ----
+  // ---- formats → guide ----
   async function startSession() {
     if (formats.length === 0) {
       setError("Pick at least one format.");
@@ -159,7 +189,20 @@ export default function Home() {
     }
     setSessionId(res.sessionId);
     rememberSpace(res.sessionId, sessionTitle);
-    await loadNext(res.sessionId);
+    await loadGuide(res.sessionId);
+  }
+
+  async function loadGuide(sid: string) {
+    setPhase("guide");
+    const res = await run(() => api.studyGuide(sid));
+    if (!res) return;
+    setGuides(res.guides);
+  }
+
+  async function skipConcept(conceptId: string) {
+    const res = await run(() => api.skipConcept(conceptId));
+    if (!res) return;
+    setGuides((prev) => prev.filter((g) => g.concept_id !== conceptId));
   }
 
   async function loadNext(sid: string = sessionId!) {
@@ -182,6 +225,13 @@ export default function Home() {
     setPhase("feedback");
   }
 
+  async function skipQuestion() {
+    if (!question?.pendingId) return;
+    const res = await run(() => api.skipQuestion(question.pendingId!));
+    if (!res) return;
+    await loadNext();
+  }
+
   async function showReteach() {
     if (!sessionId || !feedback) return;
     const res = await run(() => api.reteach(sessionId, feedback.concept.id));
@@ -200,6 +250,8 @@ export default function Home() {
 
   const toggle = (f: Format) =>
     setFormats((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]));
+
+  const inFlow = phase !== "upload";
 
   return (
     <div className="flex min-h-svh w-full">
@@ -276,6 +328,12 @@ export default function Home() {
         </div>
 
         <div className="mx-auto w-full max-w-2xl px-4 py-8">
+          {inFlow && (
+            <div className="mb-6">
+              <Steps phase={phase} />
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 rounded-xl border border-red-900 bg-red-950 p-3 text-sm text-red-200">
               {error}
@@ -397,6 +455,59 @@ export default function Home() {
             </div>
           )}
 
+          {phase === "guide" && (
+            <div className="space-y-4">
+              {busy && guides.length === 0 ? (
+                <div className={`${CARD} space-y-2 p-5 text-center`}>
+                  <div className="flex items-center justify-center gap-1">
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-white [animation-delay:-0.3s]" />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-white [animation-delay:-0.15s]" />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-white" />
+                  </div>
+                  <p className="text-sm text-zinc-400">Writing your guide…</p>
+                </div>
+              ) : (
+                <>
+                  <div className="text-center">
+                    <h2 className="text-2xl font-bold">Learn first.</h2>
+                    <p className="mt-1 text-sm text-zinc-400">
+                      Read each concept. Skip what you know. Then quiz.
+                    </p>
+                  </div>
+                  {guides.map((g) => (
+                    <div key={g.concept_id} className={`${CARD} space-y-2 p-5`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="text-lg font-semibold">{g.concept_name}</h3>
+                        <button
+                          onClick={() => skipConcept(g.concept_id)}
+                          disabled={busy}
+                          className="shrink-0 rounded-lg border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 disabled:opacity-50"
+                        >
+                          Know it
+                        </button>
+                      </div>
+                      <p className="text-sm leading-relaxed text-zinc-300">{g.summary}</p>
+                      <ul className="space-y-1">
+                        {g.keyPoints.map((k, i) => (
+                          <li key={i} className="flex gap-2 text-sm text-zinc-400">
+                            <span className="text-zinc-600">•</span>
+                            {k}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <Btn disabled={busy || guides.length === 0} onClick={() => loadNext()}>
+                      {busy ? "Loading…" : "Start quiz"}
+                    </Btn>
+                    <GhostBtn onClick={() => showDashboard()}>Dashboard</GhostBtn>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {(phase === "quiz" || phase === "feedback" || phase === "reteach") &&
             question?.progress && (
               <div className={`${CARD} mb-4 flex items-center gap-3 p-4`}>
@@ -420,6 +531,7 @@ export default function Home() {
               q={question as NextQuestionRes & { questionType: NonNullable<NextQuestionRes["questionType"]> }}
               busy={busy}
               onSubmit={submit}
+              onSkip={skipQuestion}
             />
           )}
 
