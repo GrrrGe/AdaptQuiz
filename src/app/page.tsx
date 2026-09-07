@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   api,
   ApiError,
@@ -11,7 +11,7 @@ import {
   type ReteachRes,
   type DashboardRes,
 } from "@/lib/client";
-import { QuestionCard, Feedback, Btn, GhostBtn, CARD } from "@/components/quiz";
+import { QuestionCard, Feedback, Btn, GhostBtn, ArrowBtn, CARD } from "@/components/quiz";
 import { Dashboard } from "@/components/dashboard";
 
 type Phase =
@@ -24,10 +24,46 @@ type Phase =
   | "dashboard"
   | "complete";
 
+interface Space {
+  id: string;
+  title: string;
+}
+
+const SPACES_KEY = "adaptquiz-spaces";
+
+function loadSpaces(): Space[] {
+  try {
+    return JSON.parse(localStorage.getItem(SPACES_KEY) ?? "[]") as Space[];
+  } catch {
+    return [];
+  }
+}
+
+function UploadIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" x2="12" y1="3" y2="15" />
+    </svg>
+  );
+}
+
+function TextIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 17H7A5 5 0 0 1 7 7h2" />
+      <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
+      <line x1="8" x2="16" y1="12" y2="12" />
+    </svg>
+  );
+}
+
 export default function Home() {
   const [phase, setPhase] = useState<Phase>("upload");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sidebar, setSidebar] = useState(true);
 
   // upload
   const [paste, setPaste] = useState("");
@@ -41,10 +77,27 @@ export default function Home() {
 
   // session
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [spaces, setSpaces] = useState<Space[]>([]);
   const [question, setQuestion] = useState<NextQuestionRes | null>(null);
   const [feedback, setFeedback] = useState<SubmitRes | null>(null);
   const [lesson, setLesson] = useState<ReteachRes | null>(null);
   const [dash, setDash] = useState<DashboardRes | null>(null);
+
+  useEffect(() => {
+    setSpaces(loadSpaces());
+  }, []);
+
+  function rememberSpace(id: string, title: string) {
+    setSpaces((prev) => {
+      const next = [{ id, title }, ...prev.filter((s) => s.id !== id)].slice(0, 20);
+      try {
+        localStorage.setItem(SPACES_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
 
   async function run<T>(fn: () => Promise<T>): Promise<T | null> {
     setBusy(true);
@@ -57,6 +110,21 @@ export default function Home() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function newQuiz() {
+    setPhase("upload");
+    setError(null);
+    setPaste("");
+    setFile(null);
+    setNotesText(null);
+    setUseDemo(false);
+    setTitle("");
+    setSessionId(null);
+    setQuestion(null);
+    setFeedback(null);
+    setLesson(null);
+    setDash(null);
   }
 
   // ---- upload → formats ----
@@ -83,12 +151,14 @@ export default function Home() {
       return;
     }
     setPhase("starting");
-    const res = await run(() => api.startSession(title || "Untitled session", notesText, useDemo, formats));
+    const sessionTitle = title || "Untitled session";
+    const res = await run(() => api.startSession(sessionTitle, notesText, useDemo, formats));
     if (!res) {
       setPhase("formats");
       return;
     }
     setSessionId(res.sessionId);
+    rememberSpace(res.sessionId, sessionTitle);
     await loadNext(res.sessionId);
   }
 
@@ -124,6 +194,7 @@ export default function Home() {
     const res = await run(() => api.dashboard(sid));
     if (!res) return;
     setDash(res);
+    setSessionId(res.session.id);
     setPhase(complete || res.progress.percent === 100 ? "complete" : "dashboard");
   }
 
@@ -131,179 +202,277 @@ export default function Home() {
     setFormats((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]));
 
   return (
-    <div className="space-y-5">
-      <header className="text-center">
-        <p className="text-xs font-semibold uppercase tracking-widest text-[#2C80FF]">
-          Adaptive study
-        </p>
-        <h1 className="mt-1 text-4xl font-bold text-[#3D5A80]">AdaptQuiz</h1>
-        <p className="mt-1 text-sm text-[#64748B]">Upload notes. Quiz to mastery.</p>
-      </header>
-
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-          {error}
-        </div>
-      )}
-
-      {phase === "upload" && (
-        <div className={`${CARD} space-y-4 p-5`}>
-          <textarea
-            value={paste}
-            onChange={(e) => setPaste(e.target.value)}
-            rows={7}
-            placeholder="Paste notes…"
-            className="w-full rounded-xl border border-slate-200 bg-white p-3 text-[#3D5A80] placeholder:text-[#94A3B8]"
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <Btn disabled={busy || !paste.trim()} onClick={() => continueFromUpload("paste")}>
-              {busy ? "Uploading…" : "Use text"}
-            </Btn>
-            <label className="cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-2 font-medium text-[#3D5A80] hover:bg-slate-50">
-              {file ? file.name : "Choose PDF / .txt"}
-              <input
-                type="file"
-                accept=".pdf,.txt"
-                className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            {file && (
-              <Btn disabled={busy} onClick={() => continueFromUpload("file")}>
-                {busy ? "Uploading…" : "Upload"}
-              </Btn>
-            )}
-            <GhostBtn disabled={busy} onClick={() => continueFromUpload("demo")}>
-              Try demo notes
-            </GhostBtn>
+    <div className="flex min-h-svh w-full">
+      {/* sidebar */}
+      {sidebar && (
+        <aside className="fixed inset-y-0 left-0 z-10 hidden w-[250px] flex-col border-r border-zinc-800 bg-zinc-950 md:flex">
+          <div className="p-2">
+            <div className="flex items-center gap-2 rounded-lg p-1">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-white font-bold text-zinc-950">
+                A
+              </div>
+              <span className="font-semibold">AdaptQuiz</span>
+            </div>
           </div>
-        </div>
+          <div className="flex flex-1 flex-col gap-2 overflow-auto p-2">
+            <button
+              onClick={newQuiz}
+              className="flex w-full items-center gap-2 rounded-md border border-zinc-700 px-3 py-2 text-sm font-medium hover:bg-zinc-800"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M5 12h14" />
+                <path d="M12 5v14" />
+              </svg>
+              <span>New quiz</span>
+            </button>
+            <p className="px-2 pt-2 text-xs font-semibold text-zinc-500">Quizzes</p>
+            <div className="min-h-0 flex-1 overflow-y-auto pb-4">
+              {spaces.length === 0 ? (
+                <p className="mt-4 px-2 text-center text-xs text-zinc-600">No quizzes yet.</p>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {spaces.map((s) => (
+                    <li key={s.id}>
+                      <button
+                        onClick={() => showDashboard(s.id)}
+                        className={`w-full truncate rounded-md p-2 text-left text-sm hover:bg-zinc-800 ${
+                          s.id === sessionId ? "bg-zinc-800 font-medium" : "text-zinc-400"
+                        }`}
+                      >
+                        {s.title}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+          <div className="p-2">
+            <button
+              onClick={() => setSidebar(false)}
+              className="w-full rounded-md p-2 text-left text-xs text-zinc-600 hover:bg-zinc-800 hover:text-zinc-400"
+            >
+              Toggle sidebar
+            </button>
+          </div>
+        </aside>
       )}
 
-      {phase === "formats" && (
-        <div className={`${CARD} space-y-4 p-5`}>
-          <h2 className="text-lg font-semibold text-[#3D5A80]">Formats</h2>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Title (optional)"
-            className="w-full rounded-xl border border-slate-200 bg-white p-2 text-[#3D5A80] placeholder:text-[#94A3B8]"
-          />
-          <div className="grid gap-2 sm:grid-cols-3">
-            {ALL_FORMATS.map((f) => {
-              const on = formats.includes(f.id);
-              return (
-                <button
-                  key={f.id}
-                  onClick={() => toggle(f.id)}
-                  className={`rounded-xl border p-3 text-left ${
-                    on ? "border-[#2C80FF] bg-[#EAF2FF]" : "border-slate-200 bg-white hover:bg-slate-50"
-                  }`}
-                >
-                  <span className="flex items-center gap-2 font-semibold text-[#3D5A80]">
-                    <span
-                      className={`flex h-5 w-5 items-center justify-center rounded-md text-xs text-white ${on ? "bg-[#2C80FF]" : "bg-slate-200"}`}
-                    >
-                      {on ? "✓" : ""}
+      {/* main */}
+      <main className={`relative flex min-h-svh flex-1 flex-col ${sidebar ? "md:pl-[250px]" : ""}`}>
+        <div className="absolute left-4 top-4">
+          {!sidebar && (
+            <button
+              onClick={() => setSidebar(true)}
+              aria-label="Toggle sidebar"
+              className="rounded-md p-1 hover:bg-zinc-800"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                <line x1="9" x2="9" y1="3" y2="21" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        <div className="mx-auto w-full max-w-2xl px-4 py-8">
+          {error && (
+            <div className="mb-4 rounded-xl border border-red-900 bg-red-950 p-3 text-sm text-red-200">
+              {error}
+            </div>
+          )}
+
+          {phase === "upload" && (
+            <div>
+              <div className="mb-8 text-center">
+                <h1 className="text-4xl font-bold">Welcome,</h1>
+                <p className="mt-2 text-xl text-zinc-400">What will you learn today?</p>
+              </div>
+
+              <div className={`${CARD} w-full p-2`}>
+                <div className="relative">
+                  <textarea
+                    value={paste}
+                    onChange={(e) => setPaste(e.target.value)}
+                    rows={2}
+                    placeholder="Paste notes…"
+                    className="max-h-[200px] min-h-[40px] w-full resize-none border-0 bg-transparent px-3 py-2 text-sm font-medium shadow-none placeholder:text-zinc-600 focus:outline-none"
+                  />
+                  <ArrowBtn
+                    className="absolute right-2 top-2"
+                    disabled={busy || !paste.trim()}
+                    onClick={() => continueFromUpload("paste")}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <label className="flex h-32 w-full cursor-pointer flex-col items-start justify-start gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-5 transition-all hover:border-zinc-600 hover:bg-zinc-900">
+                  <UploadIcon />
+                  <span>
+                    <span className="block text-sm font-medium sm:text-base">
+                      {file ? file.name : "Upload"}
                     </span>
-                    {f.label}
+                    <span className="mt-0.5 block text-[10px] text-zinc-500 sm:text-xs">
+                      PDF, .txt
+                    </span>
                   </span>
-                  <span className="mt-1 block text-xs text-[#94A3B8]">{f.hint}</span>
+                  <input
+                    type="file"
+                    accept=".pdf,.txt"
+                    className="hidden"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+                <button
+                  onClick={() => (file ? continueFromUpload("file") : continueFromUpload("demo"))}
+                  disabled={busy}
+                  className="flex h-32 w-full cursor-pointer flex-col items-start justify-start gap-4 rounded-2xl border border-zinc-800 bg-zinc-950 p-5 text-left transition-all hover:border-zinc-600 hover:bg-zinc-900 disabled:opacity-50"
+                >
+                  <TextIcon />
+                  <span>
+                    <span className="block text-sm font-medium sm:text-base">
+                      {file ? "Start quiz" : "Demo"}
+                    </span>
+                    <span className="mt-0.5 block text-[10px] text-zinc-500 sm:text-xs">
+                      {file ? "Use uploaded file" : "Sample notes"}
+                    </span>
+                  </span>
                 </button>
-              );
-            })}
-          </div>
-          <div className="flex gap-2">
-            <Btn disabled={busy || formats.length === 0} onClick={startSession}>
-              Start
-            </Btn>
-            <GhostBtn onClick={() => setPhase("upload")}>Back</GhostBtn>
-          </div>
-          <p className="text-xs text-[#94A3B8]">Easy first. Harder as you improve.</p>
-        </div>
-      )}
+              </div>
+            </div>
+          )}
 
-      {phase === "starting" && (
-        <div className={`${CARD} p-5 text-center text-[#64748B]`}>
-          <p className="text-2xl font-bold text-[#2C80FF]">Reading notes…</p>
-          <p className="mt-1 text-sm">Extracting concepts. This takes a minute.</p>
-        </div>
-      )}
-
-      {(phase === "quiz" || phase === "feedback" || phase === "reteach") &&
-        question?.progress && (
-          <div className={`${CARD} flex items-center gap-3 p-4`}>
-            <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-[#2C80FF] transition-all"
-                style={{ width: `${question.progress.percent}%` }}
+          {phase === "formats" && (
+            <div className={`${CARD} space-y-4 p-5`}>
+              <h2 className="text-lg font-semibold">Formats</h2>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Title (optional)"
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-950 p-2 placeholder:text-zinc-600"
               />
-            </div>
-            <span className="text-sm font-semibold text-[#2C80FF]">
-              {question.progress.mastered}/{question.progress.total}
-            </span>
-          </div>
-        )}
-
-      {phase === "quiz" && !question && busy && (
-        <div className={`${CARD} p-5 text-center text-[#64748B]`}>Writing question…</div>
-      )}
-      {phase === "quiz" && question?.questionType && (
-        <QuestionCard
-          q={question as NextQuestionRes & { questionType: NonNullable<NextQuestionRes["questionType"]> }}
-          busy={busy}
-          onSubmit={submit}
-        />
-      )}
-
-      {phase === "feedback" && feedback && (
-        <Feedback
-          f={feedback}
-          busy={busy}
-          onNext={() => (feedback.done ? showDashboard() : loadNext())}
-          onReteach={showReteach}
-          onDashboard={() => showDashboard()}
-        />
-      )}
-
-      {phase === "reteach" && lesson && (
-        <div className={`${CARD} space-y-4 p-5`}>
-          <p className="text-xs font-semibold uppercase tracking-widest text-[#2C80FF]">
-            Re-teach
-          </p>
-          <h2 className="text-lg font-semibold text-[#3D5A80]">{lesson.conceptName}</h2>
-          <p className="whitespace-pre-wrap text-[#3D5A80]">{lesson.explanation}</p>
-          {lesson.sourceExcerpt && (
-            <p className="text-xs text-[#94A3B8]">From your notes: “{lesson.sourceExcerpt}”</p>
-          )}
-          <div className="flex gap-2">
-            <Btn disabled={busy} onClick={() => loadNext()}>
-              {busy ? "Loading…" : "Re-quiz"}
-            </Btn>
-            <GhostBtn onClick={() => showDashboard()}>Dashboard</GhostBtn>
-          </div>
-        </div>
-      )}
-
-      {(phase === "dashboard" || phase === "complete") && dash && (
-        <div className="space-y-4">
-          {phase === "complete" && (
-            <div className="rounded-2xl bg-[#2C80FF] p-5 text-center text-white shadow-[0_2px_20px_-4px_rgba(44,128,255,0.5)]">
-              <p className="text-2xl font-bold">Full mastery reached.</p>
-              <p className="mt-1 text-sm text-white/70">Every concept learned.</p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {ALL_FORMATS.map((f) => {
+                  const on = formats.includes(f.id);
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => toggle(f.id)}
+                      className={`rounded-xl border p-3 text-left ${
+                        on ? "border-white bg-zinc-800" : "border-zinc-800 hover:bg-zinc-800/60"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 font-semibold">
+                        <span
+                          className={`flex h-5 w-5 items-center justify-center rounded-md text-xs ${on ? "bg-white text-zinc-950" : "bg-zinc-800 text-transparent"}`}
+                        >
+                          ✓
+                        </span>
+                        {f.label}
+                      </span>
+                      <span className="mt-1 block text-xs text-zinc-500">{f.hint}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2">
+                <Btn disabled={busy || formats.length === 0} onClick={startSession}>
+                  Start
+                </Btn>
+                <GhostBtn onClick={() => setPhase("upload")}>Back</GhostBtn>
+              </div>
+              <p className="text-xs text-zinc-600">Easy first. Harder as you improve.</p>
             </div>
           )}
-          <Dashboard data={dash} />
-          <div className="flex gap-2">
-            {phase !== "complete" && (
-              <Btn disabled={busy} onClick={() => loadNext()}>
-                Continue
-              </Btn>
+
+          {phase === "starting" && (
+            <div className={`${CARD} space-y-2 p-5 text-center`}>
+              <div className="flex items-center justify-center gap-1">
+                <div className="h-2 w-2 animate-bounce rounded-full bg-white [animation-delay:-0.3s]" />
+                <div className="h-2 w-2 animate-bounce rounded-full bg-white [animation-delay:-0.15s]" />
+                <div className="h-2 w-2 animate-bounce rounded-full bg-white" />
+              </div>
+              <p className="text-sm text-zinc-400">Reading notes…</p>
+            </div>
+          )}
+
+          {(phase === "quiz" || phase === "feedback" || phase === "reteach") &&
+            question?.progress && (
+              <div className={`${CARD} mb-4 flex items-center gap-3 p-4`}>
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-zinc-800">
+                  <div
+                    className="h-full rounded-full bg-white transition-all"
+                    style={{ width: `${question.progress.percent}%` }}
+                  />
+                </div>
+                <span className="text-sm font-semibold">
+                  {question.progress.mastered}/{question.progress.total}
+                </span>
+              </div>
             )}
-            <GhostBtn onClick={() => setPhase("upload")}>New session</GhostBtn>
-          </div>
+
+          {phase === "quiz" && !question && busy && (
+            <div className={`${CARD} p-5 text-center text-sm text-zinc-400`}>Writing question…</div>
+          )}
+          {phase === "quiz" && question?.questionType && (
+            <QuestionCard
+              q={question as NextQuestionRes & { questionType: NonNullable<NextQuestionRes["questionType"]> }}
+              busy={busy}
+              onSubmit={submit}
+            />
+          )}
+
+          {phase === "feedback" && feedback && (
+            <Feedback
+              f={feedback}
+              busy={busy}
+              onNext={() => (feedback.done ? showDashboard() : loadNext())}
+              onReteach={showReteach}
+              onDashboard={() => showDashboard()}
+            />
+          )}
+
+          {phase === "reteach" && lesson && (
+            <div className={`${CARD} space-y-4 p-5`}>
+              <p className="text-xs font-semibold uppercase tracking-widest text-zinc-500">
+                Re-teach
+              </p>
+              <h2 className="text-lg font-semibold">{lesson.conceptName}</h2>
+              <p className="whitespace-pre-wrap text-zinc-200">{lesson.explanation}</p>
+              {lesson.sourceExcerpt && (
+                <p className="text-xs text-zinc-500">From your notes: “{lesson.sourceExcerpt}”</p>
+              )}
+              <div className="flex gap-2">
+                <Btn disabled={busy} onClick={() => loadNext()}>
+                  {busy ? "Loading…" : "Re-quiz"}
+                </Btn>
+                <GhostBtn onClick={() => showDashboard()}>Dashboard</GhostBtn>
+              </div>
+            </div>
+          )}
+
+          {(phase === "dashboard" || phase === "complete") && dash && (
+            <div className="space-y-4">
+              {phase === "complete" && (
+                <div className="rounded-2xl bg-white p-5 text-center text-zinc-950">
+                  <p className="text-2xl font-bold">Full mastery reached.</p>
+                  <p className="mt-1 text-sm text-zinc-600">Every concept learned.</p>
+                </div>
+              )}
+              <Dashboard data={dash} />
+              <div className="flex gap-2">
+                {phase !== "complete" && (
+                  <Btn disabled={busy} onClick={() => loadNext()}>
+                    Continue
+                  </Btn>
+                )}
+                <GhostBtn onClick={newQuiz}>New quiz</GhostBtn>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </main>
     </div>
   );
 }
